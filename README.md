@@ -1,0 +1,87 @@
+# LedgerSeal offline evidence verifier
+
+An offline checker for the approval evidence that LedgerSeal for Jira Cloud exports. It is one file, `verify-evidence.mjs`, of about 130 lines, and uses only the Node.js standard library (`node:crypto`, `node:fs`, `node:path`, `node:url`). It needs no network and no access to Jira or to the LedgerSeal app.
+
+Read it before you run it: that is the point of keeping it small.
+
+Publisher: Asymm Systems, https://asymm.systems. Licence: Apache License 2.0 (see `LICENSE`).
+
+## What it checks
+
+| # | Check | Passes when |
+|---|---|---|
+| 1 | Snapshot hash | The SHA-256 of the canonical JSON of `snapshot` equals `attestation.snapshotHash`. |
+| 2 | History chain | The history entries, sorted by `seq`, run 1, 2, 3 with no gap; each `prevEntryHash` equals the previous `entryHash` (the first equals 64 zeros); each `entryHash` is the SHA-256 of its entry without that field. |
+| 3 | Newest seal | The attestation's `certificateId` is the certificate of the newest seal entry in the history. |
+| 4 | Signature | The Ed25519 signature `attestation.sig` verifies over the canonical JSON of the attestation without `sig`, with the public key you give. |
+
+Canonical JSON: object keys sorted by UTF-16 code unit at every level, no whitespace, undefined fields left out. `vectors.json` holds the test vectors; `--self-test` checks the code against them.
+
+## What a PASS means, and what it does not
+
+A PASS on all four checks means:
+- the evidence file has not been changed since it was exported and signed, and
+- it was signed with the private key that belongs to the public key you used.
+
+It does not mean that nobody could have created a different, consistent record. Asymm Systems holds the LedgerSeal signing key, and anyone who can rewrite the app's stored data, including the vendor, could write a new consistent chain. The evidence also covers only the fields, comments and attachments that LedgerSeal recorded in its snapshot.
+
+## Use
+
+Node.js 18 or later.
+
+```bash
+node verify-evidence.mjs <evidence.json> [public-key.pem]
+node verify-evidence.mjs --evidence <evidence.json> --public-key <public-key.pem>
+node verify-evidence.mjs --self-test
+```
+
+Without a key file, the verifier reads `keys/<keyId>.pub.pem` next to the script, using the `keyId` named in the evidence.
+
+Every run makes all four checks and prints one line per check, for example:
+
+```text
+PASS snapshot hash
+PASS history chain (1 entries)
+PASS attestation names the newest seal
+PASS signature (test-key)
+```
+
+Exit codes: `0` every check passed; `1` at least one check failed (the FAIL lines name which); `2` a missing argument or file.
+
+## Getting the evidence from Jira
+
+1. Open the sealed issue and open the **Approval Seal** panel from the issue's app button.
+2. Expand **Certificate & attestation details**.
+3. Choose **Show evidence (JSON)** and copy the JSON into a file, for example `SEC-101-evidence.json`.
+4. Run `node verify-evidence.mjs SEC-101-evidence.json`.
+
+## Public keys
+
+| Key id | Used by | File |
+|---|---|---|
+| `ls-dev-2026-11` | LedgerSeal development builds only (test sites) | `keys/ls-dev-2026-11.pub.pem` |
+
+The key of the Marketplace app will be added here, and on https://asymm.systems, before the app is listed. Evidence names its key in `attestation.keyId`.
+
+Check a download against `SHA256SUMS` in the release:
+
+```bash
+sha256sum -c SHA256SUMS
+```
+
+## Tests
+
+```bash
+node verify-evidence.mjs --self-test
+node --test test/verify.test.mjs
+```
+
+The fixtures in `test/fixtures` are made-up records signed with a test key; they hold no customer data.
+
+## Security
+
+See `SECURITY.md`. Report problems to `security@asymm.systems`, not in a public issue.
+
+## Documentation
+
+https://asymm.systems/product/jira-governance/user-guide/open-verifier
