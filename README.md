@@ -1,6 +1,6 @@
 # LedgerSeal offline evidence verifier
 
-An offline checker for the approval evidence that LedgerSeal for Jira Cloud exports. It is one file, `verify-evidence.mjs`, of about 130 lines, and uses only the Node.js standard library (`node:crypto`, `node:fs`, `node:path`, `node:url`). It needs no network and no access to Jira or to the LedgerSeal app.
+An offline checker for the approval evidence that LedgerSeal for Jira Cloud exports. It is one file, `verify-evidence.mjs`, of about 135 lines, and uses only the Node.js standard library (`node:crypto`, `node:fs`, `node:path`, `node:url`). It needs no network and no access to Jira or to the LedgerSeal app.
 
 Read it before you run it: that is the point of keeping it small.
 
@@ -16,6 +16,12 @@ Publisher: Asymm Systems, https://asymm.systems. Licence: Apache License 2.0 (se
 | 4 | Signature | The Ed25519 signature `attestation.sig` verifies over the canonical JSON of the attestation without `sig`, with the public key you give. |
 
 Canonical JSON: object keys sorted by UTF-16 code unit at every level, no whitespace, undefined fields left out. `vectors.json` holds the test vectors; `--self-test` checks the code against them.
+
+### Redaction entries and party tokens
+
+LedgerSeal names people by party token (`pty_` and 32 hex characters), not by Atlassian account id. Records made before LedgerSeal used tokens were converted once, and the history then holds a redaction entry (`statusId` `LS_REDACTED`). At that entry, account ids and names in the entries before it were replaced by tokens and the chain was computed again; the entry records the head hash before the conversion and the number of values replaced. A redaction entry is part of the chain, so checks 2 and 3 cover it. The verifier prints a `NOTE` line for each one, so you can see it.
+
+Evidence exported since then has a `parties` map from each token in the history to an account id, or `null` for a closed account. It is not signed, and no check uses it.
 
 ## What a PASS means, and what it does not
 
@@ -44,6 +50,12 @@ PASS snapshot hash
 PASS history chain (1 entries)
 PASS attestation names the newest seal
 PASS signature (test-key)
+```
+
+Evidence with a redaction entry also prints, for example:
+
+```text
+NOTE entry 2 is a redaction: 5 account ids and names were replaced by party tokens, and the entries before it were rewritten (head hash before: 9d75...28ce).
 ```
 
 Exit codes: `0` every check passed; `1` at least one check failed (the FAIL lines name which); `2` a missing argument or file.

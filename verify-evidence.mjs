@@ -16,6 +16,7 @@
  *
  * LedgerSeal open verifier (LedgerSeal spec v2 section 11). Checks a LedgerSeal evidence export without access to the app:
  * the snapshot hash, the history chain, the attestation's certificate and the Ed25519 signature.
+ * It also names each redaction entry (LS_REDACTED) in the history, where account ids were replaced by party tokens.
  * Uses the Node standard library only.
  *
  * Usage:
@@ -87,7 +88,12 @@ function verifyEvidence(evidence, publicKeyPem) {
   }
   check(sigOk, `signature (${att.keyId ?? 'no key id'})`);
 
-  for (const line of results) console.log(line);
+  // A redaction entry is part of the chain, so the checks above cover it; it is named so a reader sees it
+  const notes = history
+    .filter(row => row.statusId === 'LS_REDACTED')
+    .map(row => `NOTE entry ${row.seq} is a redaction: ${row.data?.redactedValues ?? 'some'} account ids and names were replaced by party tokens, and the entries before it were rewritten (head hash before: ${row.data?.previousHeadHash ?? 'not given'}).`);
+  if (evidence.parties) notes.push('NOTE "parties" maps party tokens to account ids (null: a closed account). It is not signed and no check uses it.');
+  for (const line of [...results, ...notes]) console.log(line);
   return results.every(line => line.startsWith('PASS'));
 }
 
